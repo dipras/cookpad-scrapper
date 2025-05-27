@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "node-html-parser": "^7.0.1",
     "puppeteer": "^24.8.2"
   }
 }

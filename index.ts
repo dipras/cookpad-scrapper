@@ -1,58 +1,47 @@
-import puppeteer from "puppeteer"
+import parse from "node-html-parser";
 import fsp from "fs/promises"
 import fs from "fs"
 
 (async () => {
-  const browser = await puppeteer.launch({
-    headless: false,
-  });
-  const page = await browser.newPage();
 
-  const title = "nasi pecel";
-  await page.goto("https://cookpad.com/id/cari/" + title);
+  const title = "lontong balap";
+  const mainUrl = "https://cookpad.com/id/cari/" + title;
   const folderPath = `Downloads/${title}`
 
-  if(!fs.existsSync(folderPath)) await fsp.mkdir(folderPath);
-  for(let i = 0; i < 0; i++) {
-    await page.mouse.wheel({
-      deltaY: 2000,
-    });
-  
-    await page.waitForNetworkIdle()
-  }
-
-  const links = await page.evaluate(() => {
-    const parents = document.querySelector("#search-recipes-list");
-    const hrefs: string[] = [];
-    parents?.childNodes.forEach((child) => {
-      const element = child as HTMLElement;
-      if (element.tagName === "LI" && element.hasAttribute("id")) {
-        const link = element.querySelector("a");
+  if (!fs.existsSync(folderPath)) await fsp.mkdir(folderPath);
+  const links: Array<String> = [];
+  for (let i = 1; i <= 25; i++) {
+    const data = await (await fetch(`${mainUrl}?page=${i}`)).text();
+    const html = parse(data);
+    html.querySelector("#search-recipes-list")?.querySelectorAll("li").forEach(child => {
+      if (child.hasAttribute('id')) {
+        const link = child.querySelector("a");
         if (link) {
-          hrefs.push(link.getAttribute("href") || "");
+          links.push(link.getAttribute("href") || "");
         }
       }
-    });
-    return hrefs;
-  });
-
-  const imgLinks : Array<String | null> = [];
-  for(const lin of links) {
-    if(lin.includes("https://")) continue;
-    await page.goto(`https://cookpad.com${lin}`);
-    const link = await page.evaluate(() => {
-      const imgElement = document.querySelector(".tofu_image")?.querySelector("img");
-      return imgElement ? imgElement.getAttribute("src") : "";
     })
-    if(link !== "") {
+  }
+
+  const imgLinks: Array<String | null> = [];
+  let idx = 1;
+  for (const lin of links) {
+    if (lin.includes("https://")) continue;
+    const data = await (await fetch(`https://cookpad.com${lin}`)).text();
+    const html = parse(data);
+    const imgElement = html.querySelector(".tofu_image")?.querySelector("img");
+    const link = imgElement ? imgElement.getAttribute("src") : "";
+    if (link && link !== "") {
       imgLinks.push(link);
     }
+    console.log(`scrap ${idx} of ${links.length} data`);
+    idx++;
   }
 
   console.log("Downloading " + imgLinks.length + " files");
-  for(let i = 0; i < imgLinks.length; i++) {
+  for (let i = 0; i < imgLinks.length; i++) {
     const url = imgLinks[i];
-    if(!url) continue;
+    if (!url) continue;
     const urls = url.split("/");
     const filename = urls[urls.length - 1];
     const response = await fetch(String(url));
@@ -61,6 +50,4 @@ import fs from "fs"
     await Bun.write(`${folderPath}/${filename}`, arrayBuffer);
     console.log(`Downloaded ${i + 1} of ${imgLinks.length}`);
   }
-
-  await browser.close();
 })();
